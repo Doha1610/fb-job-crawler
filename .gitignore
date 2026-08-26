@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+.venv1/
+venv/
+
+# IDE
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment / API keys
+.env
+
+# Facebook session
+facebook_cookies.pkl
+
+# Crawl/output data
+posts.json
+ket_qua_phan_tich.json
+test_ai_result.json
