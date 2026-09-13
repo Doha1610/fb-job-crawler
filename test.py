@@ -1,14 +1,34 @@
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
+from src.ai_analyzer import analyze_post_full
+import json
 
-load_dotenv()
+# Bài viết có NHIỀU job
+sample = """
+TUYỂN GẤP 2 VỊ TRÍ:
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+1. Kỹ sư cơ khí đi Osaka
+- Visa kỹ sư
+- Tiếng Nhật N3
+- Lương 25-30 triệu
 
-models = client.models.list()
+2. Thực tập sinh điện tử đi Tokyo
+- Visa thực tập sinh
+- Tiếng Nhật N4
+- Lương 20 triệu
+"""
 
-for model in models.data:
-    print(model.id)
+print("="*60)
+print("🧪 TEST AI 2 TẦNG")
+print("="*60)
+
+results = analyze_post_full(sample)
+
+print(f"\n📊 Kết quả: Tách được {len(results)} job\n")
+
+for i, r in enumerate(results, 1):
+    print(f"--- Job {i} ---")
+    print(f"Nội dung: {r['job_content'][:100]}...")
+    print(f"\nPhân tích:")
+    for k, v in r['analyzed'].items():
+        if v:
+            print(f"   {k}: {v}")
+    print("-" * 60)
