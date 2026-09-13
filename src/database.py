@@ -12,6 +12,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ten_nhom TEXT,
             raw_content TEXT,
+            full_content TEXT,
             nguoi_gui TEXT,
             url_bai_viet TEXT,
             url_nhom TEXT,
@@ -45,13 +46,15 @@ def save_job(post):
     try:
         c.execute('''
             INSERT INTO jobs (
-                ten_nhom, raw_content, nguoi_gui, url_bai_viet, url_nhom,
-                label, visa_type, industry, japanese_level,
-                gender, location, salary, requirements, benefits, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ten_nhom, raw_content, full_content, nguoi_gui,
+                url_bai_viet, url_nhom, label, visa_type, industry,
+                japanese_level, gender, location, salary,
+                requirements, benefits, summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             post.get('ten_nhom', ''),
             post.get('raw_content', ''),
+            post.get('full_content', ''),
             post.get('nguoi_gui', ''),
             post.get('url_bai_viet', ''),
             post.get('url_nhom', ''),
@@ -72,6 +75,16 @@ def save_job(post):
         return False
     finally:
         conn.close()
+
+
+def is_post_exists(content: str) -> bool:
+    """Kiểm tra bài viết đã tồn tại trong database chưa"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM jobs WHERE full_content = ?", (content,))
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
 
 
 def search_jobs(keyword=None, visa=None, location=None):

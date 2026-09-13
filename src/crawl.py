@@ -9,28 +9,34 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
 from src.cookie_manager import load_cookies, save_cookies
-from src.database import init_db, save_job
+from src.database import init_db, save_job, is_post_exists
 from src.classifier import classify_post
 from src.ocr import extract_text_from_image
+from src.ai_analyzer import analyze_post_full
+from src.rules_engine import load_rules, apply_rules
 
 load_dotenv()
 
+# ===== Khởi tạo client với base_url =====
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(
     api_key=api_key,
     base_url="https://api.xah.io/v1"
 )
-
 MODEL = "gpt-5.6-sol"
+# =========================================
 
 
 def tinh_thoi_gian(thoi_gian_text):
     """Chuyển chuỗi thời gian tiếng Việt thành datetime"""
     try:
         weekday_mapping = {
-            "Thứ Hai": "Monday", "Thứ Ba": "Tuesday",
-            "Thứ Tư": "Wednesday", "Thứ Năm": "Thursday",
-            "Thứ Sáu": "Friday", "Thứ bảy": "Saturday",
+            "Thứ Hai": "Monday",
+            "Thứ Ba": "Tuesday",
+            "Thứ Tư": "Wednesday",
+            "Thứ Năm": "Thursday",
+            "Thứ Sáu": "Friday",
+            "Thứ bảy": "Saturday",
             "Chủ Nhật": "Sunday",
         }
         for vietnamese, english in weekday_mapping.items():
@@ -61,59 +67,14 @@ def init_driver():
     return driver
 
 
-def analyze_job_post(content: str) -> dict:
-    """Phân tích bài đăng tuyển dụng bằng AI"""
-    prompt = f"""
-Bạn là chuyên gia phân tích tin tuyển dụng đi Nhật.
-Đọc bài đăng sau và trích xuất thông tin dưới dạng JSON:
-
-Bài đăng:
-{content}
-
-Trả về JSON:
-{{
-  "visa_type": "loại visa (kỹ sư, thực tập sinh, tokutei, v.v)",
-  "industry": "ngành nghề",
-  "japanese_level": "trình độ tiếng Nhật (N1-N5)",
-  "gender": "giới tính",
-  "location": "địa điểm làm việc",
-  "salary": "mức lương",
-  "requirements": "các yêu cầu khác",
-  "benefits": "chế độ đãi ngộ",
-  "summary": "tóm tắt ngắn gọn"
-}}
-
-Nếu không có thông tin thì để chuỗi rỗng.
-Chỉ trả về JSON, không giải thích.
-"""
-    try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-        )
-        result_text = response.choices[0].message.content.strip()
-
-        if result_text.startswith("```json"):
-            result_text = result_text[7:-3]
-        elif result_text.startswith("```"):
-            result_text = result_text[3:-3]
-
-        return json.loads(result_text)
-
-    except Exception as e:
-        print(f"❌ Lỗi phân tích: {e}")
-        return {
-            "visa_type": "", "industry": "", "japanese_level": "",
-            "gender": "", "location": "", "salary": "",
-            "requirements": "", "benefits": "", "summary": ""
-        }
-
-
 def crawl_and_analyze(url, max_posts=15):
     """
-    Crawl + phân tích.
-    Logic: Có text → AI; Không text → OCR; Không gì → bỏ qua
+    Crawl + phân tích 2 tầng + áp rules.
+    Logic:
+    - Có text → AI
+    - Không text → OCR ảnh
+    - Không gì → bỏ qua
+    - Đã có trong DB → bỏ qua
     """
     driver = init_driver()
     print("🌐 Đang mở trình duyệt...")
@@ -135,6 +96,11 @@ def crawl_and_analyze(url, max_posts=15):
 
     posts_data = []
     print("🚀 Bắt đầu crawl và phân tích...")
+
+    # ===== LOAD RULES 1 LẦN =====
+    rules = load_rules()
+    print(f"📋 Đã load rules: {len(rules)} nhóm từ khóa")
+    # ============================
 
     # Mốc thời gian 3 giờ trước
     now = datetime.now()
@@ -182,7 +148,14 @@ def crawl_and_analyze(url, max_posts=15):
                     continue
 
                 # ===== 4. KIỂM TRA TRÙNG =====
-                if text in [p["raw_content"] for p in posts_data]:
+                # 4.1: Trong session hiện tại
+                if text in [p.get("full_content", "") for p in posts_data]:
+                    print("⏭️ Bài đã có trong session → bỏ qua")
+                    continue
+
+                # 4.2: Trong database
+                if is_post_exists(text):
+                    print("⏭️ Bài đã có trong DB → bỏ qua")
                     continue
 
                 # ===== 5. LẤY THỜI GIAN =====
@@ -199,7 +172,26 @@ def crawl_and_analyze(url, max_posts=15):
                 except:
                     pass
 
-                # ===== 6. PHÂN LOẠI =====
+                # ===== 6. LẤY METADATA =====
+                nguoi_gui = ""
+                try:
+                    name_elem = article.find_element(
+                        By.CSS_SELECTOR, '[data-ad-rendering-role="profile_name"]'
+                    )
+                    nguoi_gui = name_elem.text
+                except:
+                    pass
+
+                url_bai_viet = ""
+                try:
+                    link_elem = article.find_element(
+                        By.CSS_SELECTOR, "a[href*='/posts/'], a[href*='/permalink/']"
+                    )
+                    url_bai_viet = link_elem.get_attribute("href")
+                except:
+                    pass
+
+                # ===== 7. PHÂN LOẠI =====
                 label = classify_post(text)
                 print(f"🏷️ Nhãn: {label}")
 
@@ -207,21 +199,31 @@ def crawl_and_analyze(url, max_posts=15):
                     print("⏭️ Bỏ qua tin rác")
                     continue
 
-                # ===== 7. PHÂN TÍCH AI =====
+                # ===== 8. PHÂN TÍCH AI 2 TẦNG =====
                 print(f"🔍 Đang phân tích bài {len(posts_data) + 1}...")
-                analyzed = analyze_job_post(text)
+                jobs_analyzed = analyze_post_full(text)
 
-                posts_data.append({
-                    "ten_nhom": url,
-                    "raw_content": text,
-                    "nguoi_gui": "",
-                    "url_bai_viet": "",
-                    "url_nhom": url,
-                    "label": label,
-                    "analyzed": analyzed
-                })
+                # Mỗi job tách được → 1 record
+                for job_data in jobs_analyzed:
+                    analyzed = job_data["analyzed"]
+                    job_content = job_data["job_content"]
 
-                print(f"   ✅ Xong! Nhãn: {label}")
+                    # ===== 8.1: ÁP RULES =====
+                    analyzed = apply_rules(job_content, analyzed, rules)
+
+                    posts_data.append({
+                        "ten_nhom": url,
+                        "raw_content": job_content,
+                        "full_content": text,
+                        "nguoi_gui": nguoi_gui,
+                        "url_bai_viet": url_bai_viet,
+                        "url_nhom": url,
+                        "label": label,
+                        "analyzed": analyzed
+                    })
+
+                    print(f"   ✅ Job {len(posts_data)}: {analyzed.get('summary', '')[:50]}...")
+
                 print("-" * 50)
 
                 if len(posts_data) >= max_posts:
@@ -241,7 +243,7 @@ def crawl_and_analyze(url, max_posts=15):
         last_height = new_height
 
     driver.quit()
-    print(f"\n🎉 Hoàn thành! Đã crawl {len(posts_data)} bài.")
+    print(f"\n🎉 Hoàn thành! Đã crawl {len(posts_data)} bài MỚI.")
     return posts_data
 
 
@@ -249,19 +251,21 @@ def crawl_and_analyze_save(url, max_posts=15, output_file="posts_analyzed.json")
     """Crawl, phân tích, lưu JSON + SQLite"""
     posts = crawl_and_analyze(url, max_posts)
 
-    # Lưu JSON
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(posts, f, ensure_ascii=False, indent=2)
-    print(f"\n💾 Đã lưu JSON: {output_file}")
-
-    # Lưu SQLite
     if posts:
+        # Lưu JSON
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(posts, f, ensure_ascii=False, indent=2)
+        print(f"\n💾 Đã lưu JSON: {output_file}")
+
+        # Lưu SQLite
         init_db()
         saved_count = 0
         for post in posts:
             if save_job(post):
                 saved_count += 1
         print(f"💾 Đã lưu {saved_count}/{len(posts)} bài vào database")
+    else:
+        print("⚠️ Không có bài mới để lưu")
 
     return posts
 
