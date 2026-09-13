@@ -5,30 +5,50 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
 import os
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
 from src.cookie_manager import load_cookies, save_cookies
-from src.database import init_db, save_job  # ← THÊM DÒNG NÀY
+from src.database import init_db, save_job
+from src.classifier import classify_post
+from src.ocr import extract_text_from_image
 
 load_dotenv()
 
-# ===== SỬA: Khởi tạo client với base_url của ckey.vn =====
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(
     api_key=api_key,
-    base_url="https://api.xah.io/v1"  # Endpoint của ckey.vn
+    base_url="https://api.xah.io/v1"
 )
-# ========================================================
+
+MODEL = "gpt-5.6-sol"
+
+
+def tinh_thoi_gian(thoi_gian_text):
+    """Chuyển chuỗi thời gian tiếng Việt thành datetime"""
+    try:
+        weekday_mapping = {
+            "Thứ Hai": "Monday", "Thứ Ba": "Tuesday",
+            "Thứ Tư": "Wednesday", "Thứ Năm": "Thursday",
+            "Thứ Sáu": "Friday", "Thứ bảy": "Saturday",
+            "Chủ Nhật": "Sunday",
+        }
+        for vietnamese, english in weekday_mapping.items():
+            if vietnamese in thoi_gian_text:
+                thoi_gian_text = thoi_gian_text.replace(vietnamese, english)
+                break
+        processed_string = thoi_gian_text.replace("Tháng ", "").replace("lúc ", "")
+        return datetime.strptime(processed_string, "%A, %d %m, %Y %H:%M")
+    except Exception as e:
+        print(f"⚠️ Lỗi parse thời gian: {e}")
+        return None
 
 
 def init_driver():
     """Mở trình duyệt Chrome"""
     options = webdriver.ChromeOptions()
-    # options.add_argument("--headless")
     options.add_argument("--disable-notifications")
     options.add_argument("--start-maximized")
-
-    # Tùy chọn: thêm user-agent để tránh bị phát hiện
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
@@ -37,15 +57,12 @@ def init_driver():
         service=Service(ChromeDriverManager().install()),
         options=options
     )
-
-    # Chạy script để ẩn webdriver
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
     return driver
 
 
 def analyze_job_post(content: str) -> dict:
-    """Phân tích bài đăng tuyển dụng bằng AI (dùng model của ckey.vn)"""
+    """Phân tích bài đăng tuyển dụng bằng AI"""
     prompt = f"""
 Bạn là chuyên gia phân tích tin tuyển dụng đi Nhật.
 Đọc bài đăng sau và trích xuất thông tin dưới dạng JSON:
@@ -53,34 +70,30 @@ Bạn là chuyên gia phân tích tin tuyển dụng đi Nhật.
 Bài đăng:
 {content}
 
-Hãy trả về JSON với các trường:
+Trả về JSON:
 {{
   "visa_type": "loại visa (kỹ sư, thực tập sinh, tokutei, v.v)",
-  "industry": "ngành nghề (cơ khí, điện tử, xây dựng, nhà hàng, v.v)",
-  "japanese_level": "trình độ tiếng Nhật (N1, N2, N3, N4, N5, hoặc không yêu cầu)",
-  "gender": "giới tính (nam, nữ, không yêu cầu)",
-  "location": "địa điểm làm việc (tỉnh/thành phố ở Nhật)",
-  "salary": "mức lương (nếu có)",
+  "industry": "ngành nghề",
+  "japanese_level": "trình độ tiếng Nhật (N1-N5)",
+  "gender": "giới tính",
+  "location": "địa điểm làm việc",
+  "salary": "mức lương",
   "requirements": "các yêu cầu khác",
   "benefits": "chế độ đãi ngộ",
-  "summary": "tóm tắt ngắn gọn bài đăng"
+  "summary": "tóm tắt ngắn gọn"
 }}
 
 Nếu không có thông tin thì để chuỗi rỗng.
-Chỉ trả về JSON, không kèm giải thích.
+Chỉ trả về JSON, không giải thích.
 """
     try:
-        # ===== SỬA: Dùng model của ckey.vn =====
         response = client.chat.completions.create(
-            model="gpt-5.6-sol",  # Model của ckey.vn
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
-        # ======================================
-
         result_text = response.choices[0].message.content.strip()
 
-        # Xóa code block nếu có
         if result_text.startswith("```json"):
             result_text = result_text[7:-3]
         elif result_text.startswith("```"):
@@ -91,26 +104,22 @@ Chỉ trả về JSON, không kèm giải thích.
     except Exception as e:
         print(f"❌ Lỗi phân tích: {e}")
         return {
-            "visa_type": "",
-            "industry": "",
-            "japanese_level": "",
-            "gender": "",
-            "location": "",
-            "salary": "",
-            "requirements": "",
-            "benefits": "",
-            "summary": "",
+            "visa_type": "", "industry": "", "japanese_level": "",
+            "gender": "", "location": "", "salary": "",
+            "requirements": "", "benefits": "", "summary": ""
         }
 
 
 def crawl_and_analyze(url, max_posts=15):
-    """Crawl và phân tích bài viết bằng AI, có lưu cookies"""
+    """
+    Crawl + phân tích.
+    Logic: Có text → AI; Không text → OCR; Không gì → bỏ qua
+    """
     driver = init_driver()
     print("🌐 Đang mở trình duyệt...")
 
-    # ----- XỬ LÝ COOKIES -----
+    # Xử lý cookies
     cookies_loaded = load_cookies(driver, url)
-
     if cookies_loaded:
         print("🔄 Đã load cookies, refresh trang...")
         driver.refresh()
@@ -120,56 +129,111 @@ def crawl_and_analyze(url, max_posts=15):
         driver.get(url)
         time.sleep(3)
         input("✅ Đăng nhập xong thì nhấn Enter để tiếp tục...")
-
-        # Lưu cookies
         save_cookies(driver)
-        print("🔄 Refresh trang sau khi lưu cookies...")
         driver.refresh()
         time.sleep(3)
 
-    # ----- BẮT ĐẦU CRAWL -----
     posts_data = []
     print("🚀 Bắt đầu crawl và phân tích...")
 
-    last_height = driver.execute_script("return document.body.scrollHeight")
+    # Mốc thời gian 3 giờ trước
+    now = datetime.now()
+    three_hours_ago = now - timedelta(hours=3)
+    three_hours_ago_timestamp = int(three_hours_ago.timestamp())
 
-    while len(posts_data) < max_posts:
-        # Scroll xuống
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    flag_stop = False
+
+    while len(posts_data) < max_posts and not flag_stop:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(3)
 
-        # Lấy bài viết
         articles = driver.find_elements(By.CSS_SELECTOR, "div[role='article']")
 
         for article in articles:
             try:
+                # ===== 1. LẤY TEXT =====
                 text = article.text.strip()
 
-                if text and len(text) > 80:
-                    if text not in [p["raw_content"] for p in posts_data]:
-                        # Phân tích AI
-                        print(f"\n🔍 Đang phân tích bài {len(posts_data) + 1}...")
-                        analyzed = analyze_job_post(text)
+                # ===== 2. KHÔNG CÓ TEXT → OCR ẢNH =====
+                if not text:
+                    print("\n🖼️ Không có text, thử OCR ảnh...")
+                    img_url = None
+                    try:
+                        img_elems = article.find_elements(By.CSS_SELECTOR, "img[src*='scontent']")
+                        if img_elems:
+                            img_url = img_elems[0].get_attribute("src")
+                    except:
+                        pass
 
-                        posts_data.append({
-                            "raw_content": text,
-                            "analyzed": analyzed
-                        })
+                    if img_url:
+                        text = extract_text_from_image(img_url)
+                        if text:
+                            print(f"✅ OCR đọc được text")
+                        else:
+                            print("⏭️ OCR không đọc được → bỏ qua")
+                            continue
+                    else:
+                        print("⏭️ Không tìm thấy ảnh → bỏ qua")
+                        continue
 
-                        # In preview
-                        print(f"   ✅ Đã phân tích xong!")
-                        print(f"   📌 Visa: {analyzed.get('visa_type')}")
-                        print(f"   📌 Ngành: {analyzed.get('industry')}")
-                        print(f"   📌 Tiếng Nhật: {analyzed.get('japanese_level')}")
-                        print("-" * 50)
+                # ===== 3. VẪN KHÔNG CÓ TEXT → BỎ QUA =====
+                if not text:
+                    continue
 
-                        if len(posts_data) >= max_posts:
+                # ===== 4. KIỂM TRA TRÙNG =====
+                if text in [p["raw_content"] for p in posts_data]:
+                    continue
+
+                # ===== 5. LẤY THỜI GIAN =====
+                try:
+                    time_elem = article.find_element(
+                        By.XPATH, ".//*[contains(text(),'Thứ') or contains(text(),'giờ') or contains(text(),'phút')]"
+                    )
+                    thoi_gian = tinh_thoi_gian(time_elem.text)
+                    if thoi_gian:
+                        if int(thoi_gian.timestamp()) <= three_hours_ago_timestamp:
+                            print("⏹️ Bài cũ hơn 3 giờ, dừng!")
+                            flag_stop = True
                             break
+                except:
+                    pass
+
+                # ===== 6. PHÂN LOẠI =====
+                label = classify_post(text)
+                print(f"🏷️ Nhãn: {label}")
+
+                if label == "TIN RÁC":
+                    print("⏭️ Bỏ qua tin rác")
+                    continue
+
+                # ===== 7. PHÂN TÍCH AI =====
+                print(f"🔍 Đang phân tích bài {len(posts_data) + 1}...")
+                analyzed = analyze_job_post(text)
+
+                posts_data.append({
+                    "ten_nhom": url,
+                    "raw_content": text,
+                    "nguoi_gui": "",
+                    "url_bai_viet": "",
+                    "url_nhom": url,
+                    "label": label,
+                    "analyzed": analyzed
+                })
+
+                print(f"   ✅ Xong! Nhãn: {label}")
+                print("-" * 50)
+
+                if len(posts_data) >= max_posts:
+                    break
+
             except Exception as e:
-                print(f"⚠️ Lỗi xử lý bài: {e}")
+                print(f"⚠️ Lỗi: {e}")
                 continue
 
-        # Kiểm tra còn bài mới không
+        if flag_stop:
+            break
+
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             print("📭 Không còn bài mới.")
@@ -177,34 +241,32 @@ def crawl_and_analyze(url, max_posts=15):
         last_height = new_height
 
     driver.quit()
-    print(f"\n🎉 Hoàn thành! Đã crawl và phân tích {len(posts_data)} bài.")
+    print(f"\n🎉 Hoàn thành! Đã crawl {len(posts_data)} bài.")
     return posts_data
 
 
 def crawl_and_analyze_save(url, max_posts=15, output_file="posts_analyzed.json"):
-    """Crawl, phân tích và lưu vào JSON + SQLite"""
-    
-    # 1. Crawl và phân tích
+    """Crawl, phân tích, lưu JSON + SQLite"""
     posts = crawl_and_analyze(url, max_posts)
-    
-    # 2. Lưu JSON
+
+    # Lưu JSON
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(posts, f, ensure_ascii=False, indent=2)
-    print(f"\n💾 Đã lưu JSON vào file: {output_file}")
-    
-    # 3. Lưu SQLite
+    print(f"\n💾 Đã lưu JSON: {output_file}")
+
+    # Lưu SQLite
     if posts:
         init_db()
+        saved_count = 0
         for post in posts:
-            save_job(post)
-        print(f"💾 Đã lưu {len(posts)} bài vào database (jobs.db)")
-    else:
-        print("⚠️ Không có bài viết nào để lưu vào database")
-    
+            if save_job(post):
+                saved_count += 1
+        print(f"💾 Đã lưu {saved_count}/{len(posts)} bài vào database")
+
     return posts
 
 
 def delete_cookies():
-    """Xóa cookies (khi muốn đăng nhập lại)"""
+    """Xóa cookies"""
     from src.cookie_manager import delete_cookies as del_cookies
     del_cookies()
