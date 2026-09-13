@@ -2,7 +2,7 @@ from src.crawl import crawl_and_analyze_save
 import sys
 
 # URL Facebook cần crawl
-url = "https://www.facebook.com/profile.php?id=100054527256592"
+url = "https://www.facebook.com/groups/tokuteiginothucpham.japan"
 
 # Chạy crawl và phân tích, tự động lưu vào file
 posts = crawl_and_analyze_save(

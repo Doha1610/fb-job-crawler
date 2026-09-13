@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from src.cookie_manager import load_cookies, save_cookies
+from src.database import init_db, save_job  # ← THÊM DÒNG NÀY
 
 load_dotenv()
 
@@ -17,8 +18,6 @@ client = OpenAI(
     api_key=api_key,
     base_url="https://api.xah.io/v1"  # Endpoint của ckey.vn
 )
-
-
 # ========================================================
 
 
@@ -183,13 +182,25 @@ def crawl_and_analyze(url, max_posts=15):
 
 
 def crawl_and_analyze_save(url, max_posts=15, output_file="posts_analyzed.json"):
-    """Crawl, phân tích và lưu vào file JSON"""
+    """Crawl, phân tích và lưu vào JSON + SQLite"""
+    
+    # 1. Crawl và phân tích
     posts = crawl_and_analyze(url, max_posts)
-
+    
+    # 2. Lưu JSON
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(posts, f, ensure_ascii=False, indent=2)
-
-    print(f"\n💾 Đã lưu kết quả vào file: {output_file}")
+    print(f"\n💾 Đã lưu JSON vào file: {output_file}")
+    
+    # 3. Lưu SQLite
+    if posts:
+        init_db()
+        for post in posts:
+            save_job(post)
+        print(f"💾 Đã lưu {len(posts)} bài vào database (jobs.db)")
+    else:
+        print("⚠️ Không có bài viết nào để lưu vào database")
+    
     return posts
 
 
