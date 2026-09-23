@@ -5,8 +5,8 @@ from src.formatter import format_post_full
 
 # ===== CẤU HÌNH =====
 CREDS_FILE = "google_credentials.json"
-SPREADSHEET_ID = "your-spreadsheet-id-here"  # ← Thay bằng ID Sheet của bạn
-SHEET_NAME = "Jobs"                          # ← Tên sheet
+SPREADSHEET_ID = "1FX0JOUwtr3g7seYlz2-_5GrmIcLCWSCA0Mzo6aP-Eck"
+SHEET_NAME = "Jobs"
 # ====================
 
 
@@ -24,20 +24,15 @@ def get_sheets_service():
 
 
 def push_posts_to_sheet(posts: list) -> bool:
-    """
-    Đẩy danh sách bài viết lên Google Sheet.
-    """
+    """Đẩy danh sách bài viết lên Google Sheet."""
     if not posts:
         print("⚠️ Không có bài nào để đẩy lên Sheet")
         return False
 
     try:
         service = get_sheets_service()
-
-        # Format từng bài thành row
         rows = [format_post_full(post) for post in posts]
 
-        # Ghi vào Sheet
         body = {'values': rows}
         result = service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
@@ -54,25 +49,3 @@ def push_posts_to_sheet(posts: list) -> bool:
     except Exception as e:
         print(f"❌ Lỗi đẩy Sheet: {e}")
         return False
-
-
-def get_group_urls_from_sheet(sheet_name="Groups") -> list:
-    """
-    Đọc danh sách URL group từ Google Sheet.
-    Cột B chứa URL.
-    """
-    try:
-        service = get_sheets_service()
-        result = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f'{sheet_name}!B2:B'
-        ).execute()
-
-        values = result.get('values', [])
-        urls = [row[0] for row in values if row and row[0]]
-        print(f"📋 Đã đọc {len(urls)} URL group từ Sheet")
-        return urls
-
-    except Exception as e:
-        print(f"❌ Lỗi đọc Sheet: {e}")
-        return []
