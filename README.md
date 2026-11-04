@@ -129,25 +129,5 @@ python main.py
 - [ ] Tích hợp AI Matching (Gợi ý việc làm cho ứng viên).
 - [ ] Xây dựng REST API (FastAPI).
 
-## 📄 License
-Dự án này được phân phối dưới giấy phép MIT. Xem file `LICENSE` để biết thêm chi tiết.
 
----
-*Developed with ❤️ by [Tên Của Bạn]*
-```
 
----
-
-### 🎯 CÁC BƯỚC ĐỂ ĐƯA LÊN GITHUB:
-
-1. Tạo file `README.md` ở thư mục gốc dự án, dán nội dung trên vào.
-2. (Tùy chọn) Đổi tên `[Tên Của Bạn]` ở cuối thành tên của bạn.
-3. Chạy các lệnh sau để đẩy lên GitHub:
-
-```bash
-git add README.md
-git commit -m "docs: add professional README"
-git push origin main
-```
-
-*(Nếu bạn chưa có file `requirements.txt`, hãy chạy lệnh `pip freeze > requirements.txt` để tạo nhé).*
