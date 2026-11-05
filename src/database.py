@@ -1,128 +1,225 @@
+
 import sqlite3
 
 DB_FILE = "jobs.db"
 
 
 def init_db():
-    """Khởi tạo database với schema dành cho Ứng viên (Khớp với AI mới)"""
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS candidates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ten_nhom TEXT,
-            raw_content TEXT,
-            full_content TEXT,
-            nguoi_gui TEXT,
-            url_bai_viet TEXT,
-            url_nhom TEXT,
-            label TEXT,
-            visa_mong_muon TEXT,
-            nganh_nghe TEXT,
-            trinh_do_tieng_nhat TEXT,
-            gioi_tinh TEXT,
-            dia_diem TEXT,
-            luong_mong_muon TEXT,
-            yeu_cau_khac TEXT,
-            dai_ngo TEXT,
-            so_dien_thoai TEXT,
-            zalo TEXT,
-            summary TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print("✅ Đã tạo database (bảng candidates)!")
-
-
-def save_job(post):
-    """
-    Lưu 1 ứng viên vào SQLite.
-    Trả về True nếu lưu thành công, False nếu lỗi.
-    """
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    analyzed = post.get('analyzed', {})
 
     try:
-        c.execute('''
-            INSERT INTO candidates (
-                ten_nhom, raw_content, full_content, nguoi_gui,
-                url_bai_viet, url_nhom, label, visa_mong_muon, nganh_nghe,
-                trinh_do_tieng_nhat, gioi_tinh, dia_diem, luong_mong_muon,
-                yeu_cau_khac, dai_ngo, so_dien_thoai, zalo, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            post.get('ten_nhom', ''),
-            post.get('raw_content', ''),
-            post.get('full_content', ''),
-            post.get('nguoi_gui', ''),
-            post.get('url_bai_viet', ''),
-            post.get('url_nhom', ''),
-            post.get('label', ''),
-            analyzed.get('visa_mong_muon', ''),
-            analyzed.get('nganh_nghe', ''),
-            analyzed.get('trinh_do_tieng_nhat', ''),
-            analyzed.get('gioi_tinh', ''),
-            analyzed.get('dia_diem', ''),
-            analyzed.get('luong_mong_muon', ''),
-            analyzed.get('yeu_cau_khac', ''),
-            analyzed.get('dai_ngo', ''),
-            analyzed.get('so_dien_thoai', ''),
-            analyzed.get('zalo', ''),
-            analyzed.get('summary', '')
-        ))
+        c = conn.cursor()
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ten_nhom TEXT,
+                raw_content TEXT,
+                full_content TEXT,
+                nguoi_gui TEXT,
+                url_bai_viet TEXT,
+                url_nhom TEXT,
+                label TEXT,
+                visa_mong_muon TEXT,
+                nganh_nghe TEXT,
+                trinh_do_tieng_nhat TEXT,
+                gioi_tinh TEXT,
+                dia_diem TEXT,
+                luong_mong_muon TEXT,
+                yeu_cau_khac TEXT,
+                dai_ngo TEXT,
+                so_dien_thoai TEXT,
+                zalo TEXT,
+                summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
+        print("✅ Đã khởi tạo database candidates!")
+
     finally:
         conn.close()
 
 
-def is_post_exists(content: str) -> bool:
-    """Kiểm tra bài viết đã tồn tại trong database chưa"""
+def is_post_exists(content: str, url: str = "") -> bool:
+    """Kiểm tra bài đăng đã tồn tại theo URL hoặc nội dung."""
+
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM candidates WHERE full_content = ?", (content,))
-    count = c.fetchone()[0]
-    conn.close()
-    return count > 0
+
+    try:
+        c = conn.cursor()
+
+        if url:
+            c.execute(
+                "SELECT 1 FROM candidates WHERE url_bai_viet = ? LIMIT 1",
+                (url,)
+            )
+
+            if c.fetchone():
+                return True
+
+        c.execute(
+            "SELECT 1 FROM candidates WHERE full_content = ? LIMIT 1",
+            (content,)
+        )
+
+        return c.fetchone() is not None
+
+    finally:
+        conn.close()
+
+
+def save_job(post: dict) -> bool:
+    """
+    Chỉ lưu dữ liệu đã được xác định là ứng viên.
+    Trả về True nếu lưu thành công.
+    """
+
+    if post.get("label") != "ỨNG VIÊN":
+        print("⚠️ Không lưu: bản ghi không phải ứng viên.")
+        return False
+
+    analyzed = post.get("analyzed", {})
+
+    if not analyzed:
+        print("⚠️ Không lưu: chưa có dữ liệu AI.")
+        return False
+
+    content = post.get("full_content", "")
+    url = post.get("url_bai_viet", "")
+
+    if is_post_exists(content, url):
+        print("⚠️ Bài đăng đã tồn tại, không lưu trùng.")
+        return False
+
+    special_conditions = analyzed.get("specialConditions", [])
+
+    if isinstance(special_conditions, list):
+        special_conditions = "; ".join(special_conditions)
+
+    conn = sqlite3.connect(DB_FILE)
+
+    try:
+        c = conn.cursor()
+
+        c.execute("""
+            INSERT INTO candidates (
+                ten_nhom,
+                raw_content,
+                full_content,
+                nguoi_gui,
+                url_bai_viet,
+                url_nhom,
+                label,
+                visa_mong_muon,
+                nganh_nghe,
+                trinh_do_tieng_nhat,
+                gioi_tinh,
+                dia_diem,
+                luong_mong_muon,
+                yeu_cau_khac,
+                dai_ngo,
+                so_dien_thoai,
+                zalo,
+                summary
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            post.get("ten_nhom", ""),
+            post.get("raw_content", ""),
+            content,
+            post.get("nguoi_gui", ""),
+            url,
+            post.get("url_nhom", ""),
+            "ỨNG VIÊN",
+            analyzed.get("visa", ""),
+            analyzed.get("job", ""),
+            analyzed.get("languageLevel", ""),
+            analyzed.get("gender", ""),
+            analyzed.get("workLocation", ""),
+            "",
+            special_conditions,
+            "",
+            "",
+            "",
+            analyzed.get("makeAI", "")
+        ))
+
+        conn.commit()
+        print("💾 Đã lưu ứng viên vào SQLite.")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Lỗi lưu SQLite: {e}")
+        return False
+
+    finally:
+        conn.close()
 
 
 def search_jobs(keyword=None, location=None):
-    """Tìm kiếm ứng viên trong database"""
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
 
-    query = "SELECT * FROM candidates WHERE 1=1"
-    params = []
+    try:
+        c = conn.cursor()
 
-    if keyword:
-        query += " AND raw_content LIKE ?"
-        params.append(f"%{keyword}%")
-    if location:
-        query += " AND dia_diem LIKE ?"
-        params.append(f"%{location}%")
+        query = "SELECT * FROM candidates WHERE 1=1"
+        params = []
 
-    c.execute(query, params)
-    results = c.fetchall()
-    conn.close()
-    return results
+        if keyword:
+            query += " AND raw_content LIKE ?"
+            params.append(f"%{keyword}%")
+
+        if location:
+            query += " AND dia_diem LIKE ?"
+            params.append(f"%{location}%")
+
+        c.execute(query, params)
+        return c.fetchall()
+
+    finally:
+        conn.close()
 
 
 def view_all_jobs():
-    """Xem tất cả ứng viên trong database"""
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id, ten_nhom, gioi_tinh, trinh_do_tieng_nhat, so_dien_thoai, summary FROM candidates")
-    rows = c.fetchall()
-    conn.close()
 
-    print(f"\n📊 Tổng số ứng viên: {len(rows)}\n")
-    for row in rows:
-        print(f"ID: {row[0]} | Nhóm: {row[1][:30]}...")
-        print(f"   Giới tính: {row[2]} | Tiếng Nhật: {row[3]} | SĐT: {row[4]}")
-        print(f"   Tóm tắt: {row[5][:80]}...")
-        print("-" * 60)
+    try:
+        c = conn.cursor()
+
+        c.execute("""
+            SELECT
+                id,
+                ten_nhom,
+                nguoi_gui,
+                visa_mong_muon,
+                nganh_nghe,
+                trinh_do_tieng_nhat,
+                gioi_tinh,
+                dia_diem,
+                summary
+            FROM candidates
+            ORDER BY id DESC
+        """)
+
+        rows = c.fetchall()
+
+        print(f"\n📊 Tổng số ứng viên: {len(rows)}\n")
+
+        for row in rows:
+            print(f"ID: {row[0]}")
+            print(f"Nhóm: {row[1]}")
+            print(f"Người đăng: {row[2]}")
+            print(f"Visa: {row[3]}")
+            print(f"Ngành nghề: {row[4]}")
+            print(f"Tiếng Nhật: {row[5]}")
+            print(f"Giới tính: {row[6]}")
+            print(f"Khu vực: {row[7]}")
+            print(f"Tóm tắt: {row[8]}")
+            print("-" * 60)
+
+        return rows
+
+    finally:
+        conn.close()
