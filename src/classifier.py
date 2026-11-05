@@ -1,45 +1,148 @@
+
+import re
+
+
+def normalize_text(content: str) -> str:
+    """Chuẩn hóa khoảng trắng và chữ thường, không làm mất dấu tiếng Việt."""
+    if not content:
+        return ""
+    return re.sub(r"\s+", " ", content.lower()).strip()
+
+
+def contains_any(text: str, keywords: list) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
 def classify_post(content: str) -> str:
-    content_lower = content.lower()
+    """
+    Chỉ phân loại ý định của NGƯỜI ĐĂNG BÀI.
 
-    # ===== 1. BỘ LỌC QUẢNG CÁO / DỊCH VỤ (Ưu tiên loại bỏ trước) =====
-    exclude_keywords = [
-        'seeding', 'sensei', 'ss này', 'giới thiệu', 'reply', 
-        'share', 'follow', 'inbox', 'bên mình', 'bên em', 
-        'nhận hồ sơ', 'uy tín', 'chất lượng', 'cam kết',
-        'hỗ trợ chuyển việc', 'chuyển việc', 'dịch vụ', 'tư vấn miễn phí'
+    Kết quả:
+    - ỨNG VIÊN: Có dấu hiệu rõ ràng người đăng đang tìm việc.
+    - NHÀ TUYỂN DỤNG: Có dấu hiệu rõ ràng người đăng đang tuyển người.
+    - CHƯA XÁC ĐỊNH: Chưa đủ bằng chứng.
+    """
+
+    text = normalize_text(content)
+
+    if not text:
+        return "CHƯA XÁC ĐỊNH"
+
+    # Dấu hiệu rõ ràng người đăng đang tìm việc.
+    candidate_keywords = [
+        "em cần tìm đơn",
+        "mình cần tìm đơn",
+        "tôi cần tìm đơn",
+        "em muốn tìm đơn",
+        "mình muốn tìm đơn",
+        "tôi muốn tìm đơn",
+        "em cần tìm việc",
+        "mình cần tìm việc",
+        "tôi cần tìm việc",
+        "em muốn tìm việc",
+        "mình muốn tìm việc",
+        "tôi muốn tìm việc",
+        "em đang tìm việc",
+        "mình đang tìm việc",
+        "tôi đang tìm việc",
+        "em tìm đơn",
+        "mình tìm đơn",
+        "tôi tìm đơn",
+        "em xin đơn",
+        "mình xin đơn",
+        "tôi xin đơn",
+        "ai có đơn",
+        "ai có việc",
+        "muốn tìm đơn",
+        "cần tìm đơn",
+        "đang tìm đơn",
+        "tìm đơn tokutei",
+        "tìm đơn tkt",
+        "tìm đơn quay lại",
+        "muốn quay lại nhật",
+        "em muốn quay lại nhật",
+        "mình muốn quay lại nhật",
+        "cần quay lại nhật",
+        "muốn chuyển việc",
+        "em muốn chuyển việc",
+        "mình muốn chuyển việc",
+        "cần chuyển việc",
+        "mong muốn tìm việc",
+        "muốn tìm việc làm",
+        "cần tìm việc làm",
+        "em cần việc",
+        "mình cần việc",
+        "tôi cần việc",
+        "tìm vc",
+        "xin vc",
+        "cần vc",
+        "cần job",
     ]
-    for kw in exclude_keywords:
-        if kw in content_lower:
-            return "TIN RÁC"
 
-    # ===== 2. TỪ KHÓA ỨNG VIÊN (Bổ sung thêm viết tắt) =====
-    job_keywords = [
-        'tìm đơn', 'xin đơn', 'tìm gấp đơn', 'tìm job', 'tìm việc',
-        'ai có đơn', 'cần tìm', 'có đơn nào', 'kiếm đơn', 'muốn tìm đơn',
-        'muốn đi', 'cần đi', 'ứng tuyển', 'em cần', 'mình cần', 
-        'đang tìm', 'cần xin', 'tìm việc làm', 'muốn xin việc', 
-        'đang cần việc', 'tìm vc', 'xin vc', 'cần vc', 'cần job', 
-        'ai có việc', 'tìm đơn tkt', 'tìm đơn tokutei', 'cần tìm đơn',
-        'quay lại', 'về nước', 'đầu việt', 'đầu nhật'
+    # Dấu hiệu rõ ràng người đăng đang tuyển người hoặc môi giới.
+    recruiter_keywords = [
+        "cần tuyển",
+        "tuyển gấp",
+        "đang tuyển",
+        "tuyển dụng",
+        "bên mình tuyển",
+        "bên em tuyển",
+        "công ty tuyển",
+        "nhận hồ sơ",
+        "nhận cv",
+        "nhận đăng ký",
+        "có form phỏng vấn",
+        "form phỏng vấn",
+        "đơn hàng cần tuyển",
+        "tuyển lao động",
+        "tuyển nam",
+        "tuyển nữ",
+        "tuyển cả nam và nữ",
+        "cần nam nữ",
+        "cần nam",
+        "cần nữ",
+        "bên mình có đơn",
+        "bên em có đơn",
+        "mình có đơn tuyển",
+        "em có đơn tuyển",
+        "hiện có đơn tuyển",
+        "đang có đơn tuyển",
     ]
 
-    for kw in job_keywords:
-        if kw in content_lower:
-            # Nếu có từ khóa ứng viên, kiểm tra xem có phải là bài tuyển dụng không
-            if 'tuyển' in content_lower or 'công ty' in content_lower:
-                continue # Nếu vừa có từ tuyển dụng thì bỏ qua, không tính là ứng viên
-            return "ỨNG VIÊN"
+    is_candidate = contains_any(text, candidate_keywords)
+    is_recruiter = contains_any(text, recruiter_keywords)
 
-    # ===== 3. TỪ KHÓA VIỆC LÀM (Nhà tuyển dụng) =====
-    recruitment_keywords = [
-        'tuyển', 'cần tuyển', 'tuyển gấp', 'tuyển dụng',
-        'visa', 'tokutei', 'thực tập sinh', 'kỹ sư',
-        'lương', 'về tay', 'đơn hàng', 'hợp đồng',
-        'công ty', 'phỏng vấn', 'xuất cảnh', 'lg', 'tts', 'cty', 'pv', 'xkld'
+    # Có cả hai loại tín hiệu thì không tự phán đoán.
+    if is_candidate and is_recruiter:
+        return "CHƯA XÁC ĐỊNH"
+
+    if is_candidate:
+        return "ỨNG VIÊN"
+
+    if is_recruiter:
+        return "NHÀ TUYỂN DỤNG"
+
+    # Các từ khóa này chỉ nói về chủ đề Nhật Bản,
+    # không chứng minh người đăng đang tìm việc.
+    general_keywords = [
+        "tokutei",
+        "thực tập sinh",
+        "tts",
+        "kỹ sư",
+        "visa",
+        "đầu việt",
+        "đầu nhật",
+        "quay lại",
+        "lương",
+        "đơn hàng",
+        "phỏng vấn",
+        "xuất cảnh",
+        "nông nghiệp",
+        "thực phẩm",
+        "xây dựng",
     ]
 
-    for kw in recruitment_keywords:
-        if kw in content_lower:
-            return "VIỆC LÀM NHẬT"
+    if contains_any(text, general_keywords):
+        return "CHƯA XÁC ĐỊNH"
 
-    return "TIN RÁC"
+    return "CHƯA XÁC ĐỊNH"
