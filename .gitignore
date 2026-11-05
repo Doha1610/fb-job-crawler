@@ -1,23 +1,52 @@
-# Virtual environment
+# ==========================================
+# 1. VIRTUAL ENVIRONMENT (Môi trường ảo)
+# ==========================================
 .venv/
 .venv1/
 venv/
 
-# IDE
+# ==========================================
+# 2. IDE (Cấu hình trình soạn thảo)
+# ==========================================
 .idea/
+.vscode/
 
-# Python
+# ==========================================
+# 3. PYTHON (File biên dịch)
+# ==========================================
 __pycache__/
 *.pyc
 
-# Environment / API keys
+# ==========================================
+# 4. SECRETS & CREDENTIALS (Tuyệt đối không đẩy lên)
+# ==========================================
 .env
+.env.*
+google_credentials.json
+google_credentials.json.json
 
-# Facebook session
+# ==========================================
+# 5. SESSION & PROFILE (Dữ liệu cá nhân)
+# ==========================================
 facebook_cookies.pkl
+chrome_profile/
+crawled_groups.json
 
-# Crawl/output data
+# ==========================================
+# 6. DATABASE (Dữ liệu thực tế)
+# ==========================================
+jobs.db
+*.db
+*.sqlite3
+
+# ==========================================
+# 7. OUTPUT DATA (Kết quả crawl & file tạm)
+# ==========================================
 posts.json
 ket_qua_phan_tich.json
 test_ai_result.json
-google_credentials.json
+danh_sach_bo_qua.json
+ket_qua_3day.json
+ket_qua_3h.json
+ket_qua_nhieu_group.json
+*.csv
