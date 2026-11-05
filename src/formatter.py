@@ -4,14 +4,16 @@ def format_job(data: dict) -> list:
     Dùng để ghi vào Google Sheets theo cột.
     """
     fields = [
-        "visa_type",
-        "industry",
-        "japanese_level",
-        "gender",
-        "location",
-        "salary",
-        "requirements",
-        "benefits",
+        "visa_mong_muon",
+        "nganh_nghe",
+        "trinh_do_tieng_nhat",
+        "gioi_tinh",
+        "dia_diem",
+        "luong_mong_muon",
+        "yeu_cau_khac",
+        "dai_ngo",
+        "so_dien_thoai",
+        "zalo",
         "summary",
     ]
 
@@ -35,31 +37,32 @@ def format_job(data: dict) -> list:
 def format_post_full(post: dict) -> list:
     """
     Format toàn bộ bài viết để ghi vào Sheet.
-    Bao gồm metadata + dữ liệu phân tích.
+    Khớp chính xác với 17 cột.
     """
     analyzed = post.get("analyzed", {})
 
     # Thứ tự cột trong Sheet:
-    # A: Ngày | B: Nhóm | C: Nội dung | D: Người gửi
-    # E: URL bài | F: Nhãn | G: Visa | H: Ngành
-    # I: Tiếng Nhật | J: Giới tính | K: Địa điểm
-    # L: Lương | M: Yêu cầu | N: Đãi ngộ | O: Tóm tắt
+    # A: Ngày | B: Nhóm | C: Nội dung | D: Người gửi | E: URL bài
+    # F: Nhãn | G: Visa | H: Ngành | I: Tiếng Nhật | J: Giới tính
+    # K: Địa điểm | L: Lương | M: Yêu cầu | N: Đãi ngộ | O: SĐT | P: Zalo | Q: Tóm tắt
     row = [
         "",  # A: Ngày (để trống, Sheet tự điền)
-        post.get("ten_nhom", ""),           # B
-        post.get("raw_content", ""),         # C
-        post.get("nguoi_gui", ""),           # D
-        post.get("url_bai_viet", ""),        # E
-        post.get("label", ""),               # F
-        analyzed.get("visa_type", ""),       # G
-        analyzed.get("industry", ""),        # H
-        analyzed.get("japanese_level", ""),  # I
-        analyzed.get("gender", ""),          # J
-        analyzed.get("location", ""),        # K
-        analyzed.get("salary", ""),          # L
-        analyzed.get("requirements", ""),    # M
-        analyzed.get("benefits", ""),        # N
-        analyzed.get("summary", ""),         # O
+        post.get("ten_nhom", ""),                 # B: Nhóm
+        post.get("raw_content", ""),               # C: Nội dung
+        post.get("nguoi_gui", ""),                 # D: Người gửi
+        post.get("url_bai_viet", ""),              # E: URL bài
+        post.get("label", ""),                     # F: Nhãn
+        analyzed.get("visa_mong_muon", ""),        # G: Visa
+        analyzed.get("nganh_nghe", ""),            # H: Ngành
+        analyzed.get("trinh_do_tieng_nhat", ""),   # I: Tiếng Nhật
+        analyzed.get("gioi_tinh", ""),             # J: Giới tính
+        analyzed.get("dia_diem", ""),              # K: Địa điểm
+        analyzed.get("luong_mong_muon", ""),       # L: Lương
+        analyzed.get("yeu_cau_khac", ""),          # M: Yêu cầu
+        analyzed.get("dai_ngo", ""),               # N: Đãi ngộ
+        analyzed.get("so_dien_thoai", ""),         # O: SĐT (MỚI)
+        analyzed.get("zalo", ""),                  # P: Zalo (MỚI)
+        analyzed.get("summary", ""),               # Q: Tóm tắt
     ]
 
     return row
