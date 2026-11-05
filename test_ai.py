@@ -1,6 +1,5 @@
-from src.crawl import analyze_job_post
+from src.ai_analyzer import analyze_post_full
 import json
-
 
 sample_post = """
 CÔNG TY TNHH XYZ TUYỂN KỸ SƯ CƠ KHÍ ĐI NHẬT
@@ -24,9 +23,8 @@ Quyền lợi:
 Liên hệ: 0988.xxx.xxx (Ms. Hoa)
 """
 
-
 print("=" * 60)
-print("🧪 TEST PHÂN TÍCH AI")
+print("🧪 TEST PHÂN TÍCH AI (PIPELINE 2 TẦNG)")
 print("=" * 60)
 
 print("\n📝 Nội dung bài đăng:")
@@ -37,39 +35,29 @@ print("-" * 60)
 print("\n🤖 Đang gửi lên AI...")
 print("⏳ Chờ trong giây lát...\n")
 
-
-result = analyze_job_post(sample_post)
-
+# Gọi hàm phân tích (hàm này sẽ trả về list vì có thể tách nhiều job)
+results = analyze_post_full(sample_post, group_name="Test Group")
 
 print("=" * 60)
 print("📊 KẾT QUẢ PHÂN TÍCH")
 print("=" * 60)
 
-
-for key, value in result.items():
-
-    if value is not None and value != "":
-        print(f"{key:20}: {value}")
-    else:
-        print(f"{key:20}: (Không có thông tin)")
-
+for i, res in enumerate(results, 1):
+    print(f"\n--- Kết quả {i} ---")
+    analyzed = res.get("analyzed", {})
+    
+    # In các thông tin AI trích xuất được
+    for key, value in analyzed.items():
+        if value is not None and value != "":
+            print(f"{key:20}: {value}")
+        else:
+            print(f"{key:20}: (Không có thông tin)")
 
 print("\n" + "=" * 60)
 print("✅ Test hoàn tất!")
 
-
-with open(
-    "test_ai_result.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        result,
-        f,
-        ensure_ascii=False,
-        indent=2
-    )
-
+# Lưu kết quả
+with open("test_ai_result.json", "w", encoding="utf-8") as f:
+    json.dump(results, f, ensure_ascii=False, indent=2)
 
 print("💾 Đã lưu kết quả vào file: test_ai_result.json")
